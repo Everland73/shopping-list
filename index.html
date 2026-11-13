@@ -126,6 +126,42 @@
             line-height: 32px;
         }
 
+        .name-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 8px;
+            line-height: 32px;
+        }
+
+        .name-row label {
+            font-size: 1.2em;
+            color: #888;
+            font-weight: 700;
+        }
+
+        #userNameInput {
+            flex: 1;
+            border: none;
+            border-bottom: 1.5px dashed #aaa;
+            background: transparent;
+            font-family: 'Gaegu', cursive;
+            font-size: 1.3em;
+            color: #4a7c59;
+            font-weight: 700;
+            padding: 2px 2px;
+            line-height: 32px;
+        }
+
+        #userNameInput:focus {
+            outline: none;
+            border-bottom-color: #4a7c59;
+        }
+
+        #userNameInput::placeholder {
+            color: #999;
+        }
+
         #itemInput {
             flex: 1;
             border: none;
@@ -311,12 +347,22 @@
                 <div class="title">장보기 메모</div>
                 <div class="date" id="todayDate"></div>
 
+                <div class="name-row">
+                    <label for="userNameInput">이름</label>
+                    <input
+                        type="text"
+                        id="userNameInput"
+                        placeholder="사용자 이름을 입력하세요"
+                        maxlength="20"
+                        autocomplete="off"
+                    >
+                </div>
+
                 <div class="input-row">
                     <input
                         type="text"
                         id="itemInput"
                         placeholder="여기에 적으세요..."
-                        autofocus
                     >
                     <button id="addBtn">추가</button>
                 </div>
@@ -331,8 +377,36 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script>
         const itemInput = document.getElementById('itemInput');
+        const userNameInput = document.getElementById('userNameInput');
         const addBtn = document.getElementById('addBtn');
         const shoppingList = document.getElementById('shoppingList');
+
+        // 사용자 이름: 이 기기(브라우저)에 저장해 두었다가 다음 접속 때 기본값으로 채움
+        const USER_NAME_KEY = 'shopping-list-user-name';
+
+        function loadUserName() {
+            try {
+                return localStorage.getItem(USER_NAME_KEY) || '';
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function saveUserName(name) {
+            try {
+                localStorage.setItem(USER_NAME_KEY, name);
+            } catch (e) {
+                // 저장소를 쓸 수 없는 환경(시크릿 모드 등)에서는 이번 접속에서만 유지
+            }
+        }
+
+        userNameInput.value = loadUserName();
+        userNameInput.addEventListener('input', () => saveUserName(userNameInput.value.trim()));
+        if (userNameInput.value) {
+            itemInput.focus();
+        } else {
+            userNameInput.focus();
+        }
 
         // 오늘 날짜 표시
         const today = new Date();
@@ -370,6 +444,7 @@
             const { data, error } = await db
                 .from('shopping_items')
                 .select('id, name, completed')
+                .is('deleted_at', null)
                 .order('created_at', { ascending: true });
             if (error) {
                 console.error(error);
@@ -419,7 +494,17 @@
             const text = itemInput.value.trim();
             if (text === '' || !db) return;
 
-            const { error } = await db.from('shopping_items').insert({ name: text });
+            const userName = userNameInput.value.trim();
+            if (userName === '') {
+                alert('먼저 사용자 이름을 입력해 주세요.');
+                userNameInput.focus();
+                return;
+            }
+            saveUserName(userName);
+
+            const { error } = await db
+                .from('shopping_items')
+                .insert({ name: text, user_name: userName });
             if (error) {
                 console.error(error);
                 alert('추가에 실패했어요.');
@@ -447,7 +532,11 @@
         async function deleteItem(id, element) {
             element.classList.add('removing');
             await new Promise(resolve => setTimeout(resolve, 280));
-            const { error } = await db.from('shopping_items').delete().eq('id', id);
+            // 실제로 지우지 않고 삭제 시각만 기록(soft delete). 일정 기간 DB에 보존됨
+            const { error } = await db
+                .from('shopping_items')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
             if (error) {
                 console.error(error);
                 alert('삭제에 실패했어요.');
