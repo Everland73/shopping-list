@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a newly initialized repository (Study-06) with no existing codebase yet.
+This is a newly initialized repository (shopping-list) with no existing codebase yet.
 
 ## Development Setup
 
@@ -27,4 +27,4 @@ Document the high-level architecture and key directories as they are created.
 
 ## Notes
 
-This repository is located at: C:\Users\taehj\OneDrive\Desktop\VibeCoding\Study-06
+This repository is located at: C:\Users\DevWork\Desktop\VibeCoding\shopping-list (GitHub: Everland73/shopping-list)

@@ -328,8 +328,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script>
-        const STORAGE_KEY = 'shopping-list-items';
         const itemInput = document.getElementById('itemInput');
         const addBtn = document.getElementById('addBtn');
         const shoppingList = document.getElementById('shoppingList');
@@ -348,24 +348,44 @@
             springContainer.appendChild(ring);
         }
 
-        function getItems() {
-            const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
-        }
+        let db = null;
+        let items = [];
 
-        function saveItems(items) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-        }
-
-        function loadItems() {
-            const items = getItems();
+        function showMessage(msg) {
             shoppingList.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'empty-state';
+            div.textContent = msg;
+            shoppingList.appendChild(div);
+        }
 
-            if (items.length === 0) {
-                shoppingList.innerHTML = '<div class="empty-state">아직 아무것도 없어요 ✏️</div>';
+        async function initSupabase() {
+            const res = await fetch('/api/config');
+            if (!res.ok) throw new Error('config ' + res.status);
+            const cfg = await res.json();
+            db = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+        }
+
+        async function loadItems() {
+            const { data, error } = await db
+                .from('shopping_items')
+                .select('id, name, completed')
+                .order('created_at', { ascending: true });
+            if (error) {
+                console.error(error);
+                showMessage('목록을 불러오지 못했어요 😢');
                 return;
             }
+            items = data;
+            renderItems();
+        }
 
+        function renderItems() {
+            shoppingList.innerHTML = '';
+            if (items.length === 0) {
+                showMessage('아직 아무것도 없어요 ✏️');
+                return;
+            }
             items.forEach((item, index) => {
                 addItemToDOM(item.name, item.completed, item.id, index);
             });
@@ -395,37 +415,44 @@
             shoppingList.appendChild(li);
         }
 
-        function addItem() {
+        async function addItem() {
             const text = itemInput.value.trim();
-            if (text === '') return;
+            if (text === '' || !db) return;
 
-            const items = getItems();
-            items.push({
-                id: Date.now().toString(),
-                name: text,
-                completed: false
-            });
-            saveItems(items);
+            const { error } = await db.from('shopping_items').insert({ name: text });
+            if (error) {
+                console.error(error);
+                alert('추가에 실패했어요.');
+                return;
+            }
             itemInput.value = '';
-            loadItems();
+            await loadItems();
         }
 
-        function toggleItem(id) {
-            const items = getItems();
+        async function toggleItem(id) {
             const item = items.find(i => i.id === id);
-            if (item) {
-                item.completed = !item.completed;
-                saveItems(items);
-                loadItems();
+            if (!item) return;
+            const { error } = await db
+                .from('shopping_items')
+                .update({ completed: !item.completed })
+                .eq('id', id);
+            if (error) {
+                console.error(error);
+                alert('변경에 실패했어요.');
+                return;
             }
+            await loadItems();
         }
 
         async function deleteItem(id, element) {
             element.classList.add('removing');
             await new Promise(resolve => setTimeout(resolve, 280));
-            const items = getItems().filter(i => i.id !== id);
-            saveItems(items);
-            loadItems();
+            const { error } = await db.from('shopping_items').delete().eq('id', id);
+            if (error) {
+                console.error(error);
+                alert('삭제에 실패했어요.');
+            }
+            await loadItems();
         }
 
         addBtn.addEventListener('click', addItem);
@@ -433,7 +460,15 @@
             if (e.key === 'Enter') addItem();
         });
 
-        loadItems();
+        (async () => {
+            try {
+                await initSupabase();
+                await loadItems();
+            } catch (e) {
+                console.error(e);
+                showMessage('Supabase 연결에 실패했어요 😢');
+            }
+        })();
     </script>
 </body>
 </html>
