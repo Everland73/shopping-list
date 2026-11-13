@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>쇼핑 리스트 관리자</title>
+    <style>
+        :root {
+            --bg: #f4f5f7;
+            --card: #ffffff;
+            --text: #1f2933;
+            --muted: #6b7280;
+            --line: #e5e7eb;
+            --head: #f9fafb;
+            --accent: #4a7c59;
+            --valid-bg: #e6f4ea;
+            --valid-fg: #1e6b3a;
+            --deleted-bg: #fde8e8;
+            --deleted-fg: #a12626;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #14171a;
+                --card: #1d2125;
+                --text: #e6e8eb;
+                --muted: #9aa3ad;
+                --line: #2e353b;
+                --head: #232a2f;
+                --accent: #7fb38e;
+                --valid-bg: #1d3a28;
+                --valid-fg: #8fd5a6;
+                --deleted-bg: #442222;
+                --deleted-fg: #f2a1a1;
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            padding: 24px 16px 48px;
+        }
+
+        .wrap {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            margin-bottom: 4px;
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .toolbar .spacer { flex: 1; }
+
+        .filter {
+            display: inline-flex;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--card);
+        }
+
+        .filter button {
+            border: none;
+            background: transparent;
+            color: var(--text);
+            padding: 8px 14px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .filter button + button { border-left: 1px solid var(--line); }
+
+        .filter button.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .refresh {
+            border: 1px solid var(--line);
+            background: var(--card);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .refresh:disabled { opacity: 0.6; cursor: default; }
+
+        .count {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .table-box {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 640px;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--line);
+            white-space: nowrap;
+        }
+
+        th {
+            background: var(--head);
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 0.82rem;
+        }
+
+        tbody tr:last-child td { border-bottom: none; }
+
+        td.item { white-space: normal; word-break: break-word; min-width: 160px; }
+        td.time { color: var(--muted); font-variant-numeric: tabular-nums; }
+        td.empty { color: var(--muted); }
+        tr.is-deleted td.item { color: var(--muted); text-decoration: line-through; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge.valid { background: var(--valid-bg); color: var(--valid-fg); }
+        .badge.deleted { background: var(--deleted-bg); color: var(--deleted-fg); }
+
+        .message {
+            padding: 40px 16px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 16px 12px 32px; }
+            h1 { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h1>쇼핑 리스트 관리자</h1>
+        <p class="sub">Supabase <code>shopping_items</code> 테이블의 전체 데이터 (삭제된 항목 포함, 읽기 전용)</p>
+
+        <div class="toolbar">
+            <div class="filter" id="filter">
+                <button type="button" data-filter="all" class="active">전체</button>
+                <button type="button" data-filter="valid">유효</button>
+                <button type="button" data-filter="deleted">삭제됨</button>
+            </div>
+            <span class="count" id="count"></span>
+            <span class="spacer"></span>
+            <button type="button" class="refresh" id="refreshBtn">새로고침</button>
+        </div>
+
+        <div class="table-box">
+            <table>
+                <thead>
+                    <tr>
+                        <th>이름</th>
+                        <th>장보기 항목</th>
+                        <th>유효여부</th>
+                        <th>입력시간</th>
+                        <th>삭제시간</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+            <div class="message" id="message" hidden></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+    <script>
+        const tbody = document.getElementById('tbody');
+        const message = document.getElementById('message');
+        const countEl = document.getElementById('count');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const filterEl = document.getElementById('filter');
+
+        let db = null;
+        let rows = [];
+        let currentFilter = 'all';
+
+        const timeFormat = new Intl.DateTimeFormat('ko-KR', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false
+        });
+
+        function formatTime(value) {
+            return value ? timeFormat.format(new Date(value)) : '-';
+        }
+
+        function showMessage(text) {
+            tbody.innerHTML = '';
+            message.textContent = text;
+            message.hidden = false;
+        }
+
+        function cell(text, className) {
+            const td = document.createElement('td');
+            td.textContent = text;
+            if (className) td.className = className;
+            return td;
+        }
+
+        function render() {
+            const visible = rows.filter(r => {
+                if (currentFilter === 'valid') return !r.deleted_at;
+                if (currentFilter === 'deleted') return !!r.deleted_at;
+                return true;
+            });
+
+            const validCount = rows.filter(r => !r.deleted_at).length;
+            countEl.textContent = `전체 ${rows.length}건 · 유효 ${validCount}건 · 삭제 ${rows.length - validCount}건`;
+
+            tbody.innerHTML = '';
+            if (visible.length === 0) {
+                showMessage('표시할 데이터가 없어요.');
+                return;
+            }
+            message.hidden = true;
+
+            visible.forEach(r => {
+                const tr = document.createElement('tr');
+                if (r.deleted_at) tr.className = 'is-deleted';
+
+                tr.appendChild(r.user_name ? cell(r.user_name) : cell('(이름 없음)', 'empty'));
+                tr.appendChild(cell(r.name, 'item'));
+
+                const statusTd = document.createElement('td');
+                const badge = document.createElement('span');
+                badge.className = 'badge ' + (r.deleted_at ? 'deleted' : 'valid');
+                badge.textContent = r.deleted_at ? '삭제됨' : '유효';
+                statusTd.appendChild(badge);
+                tr.appendChild(statusTd);
+
+                tr.appendChild(cell(formatTime(r.created_at), 'time'));
+                tr.appendChild(cell(formatTime(r.deleted_at), 'time'));
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function initSupabase() {
+            const res = await fetch('/api/config');
+            if (!res.ok) throw new Error('config ' + res.status);
+            const cfg = await res.json();
+            db = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+        }
+
+        async function loadRows() {
+            refreshBtn.disabled = true;
+            try {
+                if (!db) await initSupabase();
+                const { data, error } = await db
+                    .from('shopping_items')
+                    .select('id, name, user_name, completed, created_at, deleted_at')
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+                rows = data;
+                render();
+            } catch (e) {
+                console.error(e);
+                countEl.textContent = '';
+                showMessage('데이터를 불러오지 못했어요. Supabase 연결을 확인해 주세요.');
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+
+        filterEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-filter]');
+            if (!btn) return;
+            currentFilter = btn.dataset.filter;
+            filterEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+            render();
+        });
+
+        refreshBtn.addEventListener('click', loadRows);
+
+        showMessage('불러오는 중...');
+        loadRows();
+    </script>
+</body>
+</html>
